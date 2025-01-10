@@ -2,6 +2,7 @@ import argparse
 
 from reddit_binary.dataset import get_dataset
 from reddit_binary.train_eval import cross_validation_with_val_set
+from reddit_binary.train_eval_prompt import cross_validation_with_val_set_prompt
 from reddit_binary.gin import GIN
 import reddit_binary.utils as utils
 
@@ -41,6 +42,7 @@ parser.add_argument("--DQ", action="store_true", help="enables DegreeQuant")
 parser.add_argument("--low", type=float, default=0.0)
 parser.add_argument("--change", type=float, default=0.1)
 parser.add_argument("--sample_prop", type=float, default=None)
+parser.add_argument("--saves", type=str, default=None)
 
 quant_mode = parser.add_mutually_exclusive_group(required=True)
 quant_mode.add_argument("--fp32", action="store_true", help="no quantization")
@@ -74,6 +76,10 @@ elif args.int4:
 else:
     raise NotImplementedError
 
+if args.saves:
+    saves = args.saves
+else:
+    saves = None
 ste = False
 momentum = False
 percentile = None
@@ -135,7 +141,7 @@ dir, writer = utils.set_outputdir_and_writer(
     args.change,
 )
 
-loss, acc, std = cross_validation_with_val_set(
+loss, acc, std = cross_validation_with_val_set_prompt(
     dataset,
     model,
     folds=10,
@@ -147,6 +153,7 @@ loss, acc, std = cross_validation_with_val_set(
     weight_decay=args.wd,
     writer=writer,
     logger=None,
+    saves = saves,
 )
 best_result = (loss, acc, std)
 

@@ -7,7 +7,7 @@ from dq.quantization import IntegerQuantizer
 from dq.linear_quantized import LinearQuantized
 from dq.baseline_quant import GINConvQuant
 from dq.multi_quant import evaluate_prob_mask, GINConvMultiQuant
-
+from prompt_graph.prompt import GPF, GPF_plus
 
 def create_quantizer(qypte, ste, momentum, percentile, signed, sample_prop):
     if qypte == "FP32":
@@ -158,11 +158,10 @@ class GIN(torch.nn.Module):
                 )
             )
 
-        # self.lin1 = LinearQuantized(hidden, hidden, layer_quantizers=lq_signed)
-        # self.lin2 = LinearQuantized(hidden, dataset.num_classes, layer_quantizers=lq)
-        self.lin1 = Linear(hidden, hidden)
-        self.lin2 = Linear(hidden, dataset.num_classes)
-
+        self.lin1 = LinearQuantized(hidden, hidden, layer_quantizers=lq_signed)
+        self.lin2 = LinearQuantized(hidden, dataset.num_classes, layer_quantizers=lq)
+        
+        self.prompt = GPF(self.input_dim)
     def reset_parameters(self):
         self.conv1.reset_parameters()
         for conv in self.convs:

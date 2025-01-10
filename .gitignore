@@ -1,4 +1,6 @@
 run
 dataset
 **/__pycache__
-
+*.txt
+saves
+*.ipynb
