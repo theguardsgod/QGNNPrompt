@@ -7,11 +7,11 @@ from torch import tensor
 from torch.optim import Adam
 from sklearn.model_selection import StratifiedKFold
 from torch_geometric.data import DataLoader, DenseDataLoader as DenseLoader
-
+from prompt import GPF, GPF_plus
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def cross_validation_with_val_set(
+def cross_validation_with_val_set_prompt(
     dataset,
     model,
     folds,
@@ -44,12 +44,26 @@ def cross_validation_with_val_set(
             val_loader = DataLoader(val_dataset, batch_size, shuffle=False)
             test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
-        #model.to(device).reset_parameters()
-       
+        # Load the state dictionary (weights only)
+        state_dict = torch.load("./saves/GIN_fp32_fold-0.pth")
+        # Iterate through state_dict to find mismatched shapes
+        for key, value in state_dict.items():
+            if value.shape == torch.Size([0]):  # If it is an empty tensor
+                print(f"Fixing tensor {key} with shape {value.shape}")
+                state_dict[key] = torch.tensor([])  # Replace with scalar tensor
 
         # Move the model to the specified device
         model = model.to(device)
-        optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+        #prompt = GPF(dataset.num_features).to(device)
+        # prompt = GPF_plus(dataset.num_features, 20).to(device)
+
+        model_param_group = []
+        # model_param_group.append({"params": prompt.parameters()})
+        # model_param_group.append({"params": model.lin1.parameters()})
+        # model_param_group.append({"params": model.lin2.parameters()})
+        model_param_group.append({"params": model.parameters()})
+        optimizer = Adam(model_param_group, lr=lr, weight_decay=weight_decay)
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -61,16 +75,16 @@ def cross_validation_with_val_set(
         
         max_acc = 0
         for epoch in range(1, epochs + 1):
-            train_loss = train(model, optimizer, train_loader)
-            val_loss = eval_loss(model, val_loader)
+            train_loss = GPFTrain(model, optimizer, train_loader, prompt)
+            val_loss = GPFeval_loss(model, val_loader, prompt)
             val_losses.append(val_loss)
-            val_acc = eval_acc(model, val_loader)
+            val_acc = GPFeval_acc(model, val_loader, prompt)
             if val_acc > max_acc:
                 max_acc = val_acc
                 if saves != None:
                     torch.save(model.state_dict(),"./saves/" + saves +f"_fold-{fold}.pth")
 
-            accs.append(eval_acc(model, test_loader))
+            accs.append(GPFeval_acc(model, test_loader, prompt))
             eval_info = {
                 "fold": fold,
                 "epoch": epoch,
@@ -188,6 +202,53 @@ def eval_loss(model, loader):
     loss = 0
     for data in loader:
         data = data.to(device)
+        with torch.no_grad():
+            out = model(data)
+        loss += F.nll_loss(out, data.y.view(-1), reduction="sum").item()
+    return loss / len(loader.dataset)
+
+
+def GPFTrain(model, optimizer, loader, prompt):
+    prompt.train()
+    model.lin1.train()
+    model.lin2.train()
+    model.train()
+    total_loss = 0.0 
+    for data in loader:
+        optimizer.zero_grad()
+        data = data.to(device)
+        data.x = prompt.add(data.x)
+        out = model(data)
+        loss = F.nll_loss(out, data.y.view(-1))
+        loss.backward()
+        total_loss += loss.item() * num_graphs(data)
+        optimizer.step()
+    return total_loss / len(loader.dataset)
+
+def GPFeval_acc(model, loader, prompt):
+    prompt.eval()
+    model.lin1.eval()
+    model.lin2.eval()
+    model.eval()
+    correct = 0
+    for data in loader:
+        data = data.to(device)
+        data.x = prompt.add(data.x)
+        with torch.no_grad():
+            pred = model(data).max(1)[1]
+        correct += pred.eq(data.y.view(-1)).sum().item()
+    return correct / len(loader.dataset)
+
+
+def GPFeval_loss(model, loader, prompt):
+    prompt.eval()
+    model.lin1.eval()
+    model.lin2.eval()
+    model.eval()
+    loss = 0
+    for data in loader:
+        data = data.to(device)
+        data.x = prompt.add(data.x)
         with torch.no_grad():
             out = model(data)
         loss += F.nll_loss(out, data.y.view(-1), reduction="sum").item()

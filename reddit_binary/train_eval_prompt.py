@@ -45,7 +45,7 @@ def cross_validation_with_val_set_prompt(
             test_loader = DataLoader(test_dataset, batch_size, shuffle=False)
 
         # Load the state dictionary (weights only)
-        state_dict = torch.load("./saves/GIN_int4_DQ_fold-0.pth")
+        state_dict = torch.load("./saves/GIN_int4_fold-0.pth")
         # Iterate through state_dict to find mismatched shapes
         for key, value in state_dict.items():
             if value.shape == torch.Size([0]):  # If it is an empty tensor
@@ -56,14 +56,14 @@ def cross_validation_with_val_set_prompt(
         model = model.to(device)
 
         #prompt = GPF(dataset.num_features).to(device)
-        prompt = GPF_plus(dataset.num_features, 20).to(device)
+        # prompt = GPF_plus(dataset.num_features, 20).to(device)
 
         model_param_group = []
-        model_param_group.append({"params": prompt.parameters()})
-        # model_param_group.append({"params": model.lin1.parameters()})
-        # model_param_group.append({"params": model.lin2.parameters()})
-        model_param_group.append({"params": model.parameters()})
-        optimizer = Adam(model_param_group, lr=lr, weight_decay=weight_decay)
+        model_param_group.append({"params": model.prompt.parameters()})
+        model_param_group.append({"params": model.lin1.parameters()})
+        model_param_group.append({"params": model.lin2.parameters()})
+        # model_param_group.append({"params": model.parameters()})
+        optimizer = Adam(model_param_group, lr=lr*0.1, weight_decay=weight_decay)
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -75,16 +75,16 @@ def cross_validation_with_val_set_prompt(
         
         max_acc = 0
         for epoch in range(1, epochs + 1):
-            train_loss = GPFTrain(model, optimizer, train_loader, prompt)
-            val_loss = GPFeval_loss(model, val_loader, prompt)
+            train_loss = GPFTrain(model, optimizer, train_loader)
+            val_loss = GPFeval_loss(model, val_loader)
             val_losses.append(val_loss)
-            val_acc = GPFeval_acc(model, val_loader, prompt)
+            val_acc = GPFeval_acc(model, val_loader)
             if val_acc > max_acc:
                 max_acc = val_acc
                 if saves != None:
                     torch.save(model.state_dict(),"./saves/" + saves +f"_fold-{fold}.pth")
 
-            accs.append(GPFeval_acc(model, test_loader, prompt))
+            accs.append(GPFeval_acc(model, test_loader))
             eval_info = {
                 "fold": fold,
                 "epoch": epoch,
@@ -208,16 +208,16 @@ def eval_loss(model, loader):
     return loss / len(loader.dataset)
 
 
-def GPFTrain(model, optimizer, loader, prompt):
-    prompt.train()
+def GPFTrain(model, optimizer, loader):
+    model.prompt.train()
     model.lin1.train()
     model.lin2.train()
-    model.train()
+    #model.train()
     total_loss = 0.0 
     for data in loader:
         optimizer.zero_grad()
         data = data.to(device)
-        data.x = prompt.add(data.x)
+        
         out = model(data)
         loss = F.nll_loss(out, data.y.view(-1))
         loss.backward()
@@ -225,30 +225,28 @@ def GPFTrain(model, optimizer, loader, prompt):
         optimizer.step()
     return total_loss / len(loader.dataset)
 
-def GPFeval_acc(model, loader, prompt):
-    prompt.eval()
+def GPFeval_acc(model, loader):
+    model.prompt.eval()
     model.lin1.eval()
     model.lin2.eval()
-    model.eval()
+    #model.eval()
     correct = 0
     for data in loader:
         data = data.to(device)
-        data.x = prompt.add(data.x)
         with torch.no_grad():
             pred = model(data).max(1)[1]
         correct += pred.eq(data.y.view(-1)).sum().item()
     return correct / len(loader.dataset)
 
 
-def GPFeval_loss(model, loader, prompt):
-    prompt.eval()
+def GPFeval_loss(model, loader):
+    model.prompt.eval()
     model.lin1.eval()
     model.lin2.eval()
-    model.eval()
+    #model.eval()
     loss = 0
     for data in loader:
         data = data.to(device)
-        data.x = prompt.add(data.x)
         with torch.no_grad():
             out = model(data)
         loss += F.nll_loss(out, data.y.view(-1), reduction="sum").item()

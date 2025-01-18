@@ -3,9 +3,12 @@ import argparse
 from reddit_binary.dataset import get_dataset
 from reddit_binary.train_eval import cross_validation_with_val_set
 from reddit_binary.train_eval_prompt import cross_validation_with_val_set_prompt
-from reddit_binary.gin import GIN
+from reddit_binary.evaluate import evaluate
+#from reddit_binary.gin import GIN
 import reddit_binary.utils as utils
-
+from reddit_binary.gin_quan import GIN_quan
+from reddit_binary.quangin import GIN
+from reddit_binary.ginGPF import GINGPF
 # This code is substantially derived from PyTorch Geometric's repo
 # see: https://github.com/rusty1s/pytorch_geometric/tree/master/benchmark/kernel
 
@@ -21,7 +24,14 @@ import reddit_binary.utils as utils
 # REACH INT4 acc of 54.1%
 # python main.py --int4 --ste_mom --lr 0.05 --epochs 200
 ################################################################################################
-
+# import debugpy
+# try:
+#     # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to 127.0.0.1
+#     debugpy.listen(("localhost", 9501))
+#     print("Waiting for debugger attach")
+#     debugpy.wait_for_client()
+# except Exception as e:
+#     pass
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--epochs", type=int, default=200)
@@ -111,7 +121,18 @@ print(args)
 # below is just the default from PyG
 dataset = get_dataset(args.path, dataset_name, sparse=True, DQ=DQ)
 
-model = GIN(
+# model = GIN(
+#     dataset,
+#     num_layers=args.num_layers,
+#     hidden=args.hidden,
+#     dq=args.DQ,
+#     qypte=qypte,
+#     ste=ste,
+#     momentum=momentum,
+#     percentile=percentile,
+#     sample_prop=args.sample_prop,
+# )
+model = GINGPF(
     dataset,
     num_layers=args.num_layers,
     hidden=args.hidden,
@@ -122,6 +143,15 @@ model = GIN(
     percentile=percentile,
     sample_prop=args.sample_prop,
 )
+# model = GIN_quan(
+#     input_dim=dataset.num_features, 
+#     hid_dim=args.hidden, 
+#     out_dim=dataset.num_classes, 
+#     num_layer=args.num_layers,
+#     JK="last", 
+#     drop_ratio=0.5, 
+#     pool='mean'
+# )
 print(f"model has {count_parameters(model)} parameters")
 
 # output dir and tensorboard writer
@@ -141,7 +171,7 @@ dir, writer = utils.set_outputdir_and_writer(
     args.change,
 )
 
-loss, acc, std = cross_validation_with_val_set_prompt(
+loss, acc, std = cross_validation_with_val_set(
     dataset,
     model,
     folds=10,
@@ -157,5 +187,20 @@ loss, acc, std = cross_validation_with_val_set_prompt(
 )
 best_result = (loss, acc, std)
 
+# acc, std = evaluate(
+#     dataset,
+#     model,
+#     folds=10,
+#     epochs=args.epochs,
+#     batch_size=args.batch_size,
+#     lr=args.lr,
+#     lr_decay_factor=args.lr_decay_factor,
+#     lr_decay_step_size=args.lr_decay_step_size,
+#     weight_decay=args.wd,
+#     writer=writer,
+#     logger=None,
+#     saves = saves,
+# )
+# best_result = (0, acc, std)
 desc = "{:.3f} ± {:.3f}".format(best_result[1], best_result[2])
 print("Result - {}".format(desc))

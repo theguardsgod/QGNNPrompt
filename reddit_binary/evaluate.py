@@ -11,7 +11,7 @@ from torch_geometric.data import DataLoader, DenseDataLoader as DenseLoader
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def cross_validation_with_val_set(
+def evaluate(
     dataset,
     model,
     folds,
@@ -46,6 +46,12 @@ def cross_validation_with_val_set(
 
         #model.to(device).reset_parameters()
        
+        state_dict = torch.load(f"./saves/GIN_int4_fold-{fold}.pth")
+        # Iterate through state_dict to find mismatched shapes
+        for key, value in state_dict.items():
+            if value.shape == torch.Size([0]):  # If it is an empty tensor
+                print(f"Fixing tensor {key} with shape {value.shape}")
+                state_dict[key] = torch.tensor([])  # Replace with scalar tensor
 
         # Move the model to the specified device
         model = model.to(device)
@@ -60,74 +66,29 @@ def cross_validation_with_val_set(
             t = tqdm(total=epochs, desc="Fold #" + str(fold))
         
         max_acc = 0
-        for epoch in range(1, epochs + 1):
-            train_loss = train(model, optimizer, train_loader)
-            val_loss = eval_loss(model, val_loader)
-            val_losses.append(val_loss)
-            val_acc = eval_acc(model, val_loader)
-            if val_acc > max_acc:
-                max_acc = val_acc
-                if saves != None:
-                    torch.save(model.state_dict(),"./saves/" + saves +f"_fold-{fold}.pth")
+        accs.append(eval_acc(model, test_loader))
 
-            accs.append(eval_acc(model, test_loader))
-            eval_info = {
-                "fold": fold,
-                "epoch": epoch,
-                "train_loss": train_loss,
-                "val_loss": val_losses[-1],
-                "test_acc": accs[-1],
-            }
-
-            if logger is not None:
-                logger(eval_info)
-
-            if writer is not None:
-                writer.add_scalar(f"Fold{fold}/Train_Loss", train_loss, epoch)
-                writer.add_scalar(f"Fold{fold}/Val_Loss", val_loss, epoch)
-                writer.add_scalar(
-                    f"Fold{fold}/Lr", optimizer.param_groups[0]["lr"], epoch
-                )
-
-            if epoch % lr_decay_step_size == 0:
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = lr_decay_factor * param_group["lr"]
-
-            if use_tqdm:
-                t.set_postfix(
-                    {
-                        "Train_Loss": "{:05.3f}".format(train_loss),
-                        "Val_Loss": "{:05.3f}".format(val_loss),
-                    }
-                )
-                t.update(1)
+        
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         t_end = time.perf_counter()
         durations.append(t_end - t_start)
 
-    loss, acc, duration = tensor(val_losses), tensor(accs), tensor(durations)
-    loss, acc = loss.view(folds, epochs), acc.view(folds, epochs)
-    loss, argmin = loss.min(dim=1)
-    acc = acc[torch.arange(folds, dtype=torch.long), argmin]
 
-    loss_mean = loss.mean().item()
+    acc = accs
+    duration = tensor(durations)
     acc_mean = acc.mean().item()
     acc_std = acc.std().item()
     duration_mean = duration.mean().item()
     print(
-        "Val Loss: {:.4f}, Test Accuracy: {:.3f} ± {:.3f}, Duration: {:.3f}".format(
-            loss_mean, acc_mean, acc_std, duration_mean
+        "Test Accuracy: {:.3f} ± {:.3f}, Duration: {:.3f}".format(
+             acc_mean, acc_std, duration_mean
         )
     )
-    if writer is not None:
-        writer.add_scalar(f"Final/Test_Acc", acc_mean, epoch)
-        writer.add_scalar(f"Final/Test_Acc_Std", acc_std, epoch)
-        writer.add_scalar(f"Final/Test_Loss", loss_mean, epoch)
-        writer.close()
 
-    return loss_mean, acc_mean, acc_std
+
+    return acc_mean, acc_std
 
 
 def k_fold(dataset, folds):

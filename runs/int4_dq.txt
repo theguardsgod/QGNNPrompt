@@ -1,6 +1,6 @@
-Namespace(DQ=True, batch_size=128, change=0.1, epochs=200, fp32=False, gc_abs=False, gc_mom=False, gc_per=True, hidden=64, int4=True, int8=False, low=0.1, lr=0.001, lr_decay_factor=0.5, lr_decay_step_size=50, noise=1.0, num_layers=5, outdir='./run', path='./data', sample_prop=None, ste_abs=False, ste_mom=False, ste_per=False, wd=4e-05)
+Namespace(epochs=200, batch_size=128, num_layers=5, hidden=64, lr=0.001, wd=4e-05, noise=1.0, lr_decay_factor=0.5, lr_decay_step_size=50, path='/data/cyliu/dataset/reddit', outdir='./run', DQ=True, low=0.1, change=0.1, sample_prop=None, saves=None, fp32=False, int8=False, int4=True, ste_abs=False, ste_mom=False, gc_abs=False, gc_mom=False, ste_per=False, gc_per=True)
 Generating ProbabilisticHighDegreeMask: {'prob_mask_low': 0.1, 'prob_mask_change': 0.1}
 model has 42503 parameters
-Output dir:run/GIN/layers_5/hidden_64/INT4_DQ_low0.1_chng0.1/GC_PER/lr_0.001/wd_4e-05/03_05_15_39_23
-Val Loss: 0.2713, Test Accuracy: 0.862 ± 0.032, Duration: 3906.393
-Result - 0.862 ± 0.032
+Output dir:run/GIN/layers_5/hidden_64/INT4_DQ_low0.1_chng0.1/GC_PER/lr_0.001/wd_4e-05/01_17_05_53_54
+Val Loss: 0.2187, Test Accuracy: 0.910 ± 0.025, Duration: 2956.058
+Result - 0.910 ± 0.025

@@ -7,7 +7,7 @@ from dq.quantization import IntegerQuantizer
 from dq.linear_quantized import LinearQuantized
 from dq.baseline_quant import GINConvQuant
 from dq.multi_quant import evaluate_prob_mask, GINConvMultiQuant
-from prompt_graph.prompt import GPF, GPF_plus
+from prompt import GPF, GPF_plus
 
 def create_quantizer(qypte, ste, momentum, percentile, signed, sample_prop):
     if qypte == "FP32":
@@ -92,7 +92,7 @@ class ResettableSequential(Sequential):
                 child.reset_parameters()
 
 
-class GIN(torch.nn.Module):
+class GINGPF(torch.nn.Module):
     def __init__(
         self,
         dataset,
@@ -105,7 +105,7 @@ class GIN(torch.nn.Module):
         percentile,
         sample_prop,
     ):
-        super(GIN, self).__init__()
+        super(GINGPF, self).__init__()
 
         self.is_dq = dq
         gin_layer = GINConvMultiQuant if dq else GINConvQuant 
@@ -129,6 +129,10 @@ class GIN(torch.nn.Module):
             sample_prop=sample_prop,
         )
 
+        # self.emb = torch.nn.Sequential(
+        #     Linear(dataset.num_features, hidden*2),
+        #     ReLU()
+        # )
         # NOTE: see comment in multi_quant.py on the use of 
         # "mask-aware" MLPs.
         self.conv1 = gin_layer(
@@ -161,7 +165,8 @@ class GIN(torch.nn.Module):
         self.lin1 = LinearQuantized(hidden, hidden, layer_quantizers=lq_signed)
         self.lin2 = LinearQuantized(hidden, dataset.num_classes, layer_quantizers=lq)
         
-        self.prompt = GPF(self.input_dim)
+        # self.prompt = GPF_plus(hidden*2, 100)
+        self.prompt = GPF(hidden)
     def reset_parameters(self):
         self.conv1.reset_parameters()
         for conv in self.convs:
@@ -181,8 +186,10 @@ class GIN(torch.nn.Module):
             mask = None
 
         x, edge_index, batch = data.x, data.edge_index, data.batch
-
+        # x = self.emb(x)
+        
         x = self.conv1(x, edge_index, mask)
+        x = self.prompt.add(x)
         for conv in self.convs:
             x = conv(x, edge_index, mask)
 

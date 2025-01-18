@@ -7,7 +7,7 @@ from dq.quantization import IntegerQuantizer
 from dq.linear_quantized import LinearQuantized
 from dq.baseline_quant import GINConvQuant
 from dq.multi_quant import evaluate_prob_mask, GINConvMultiQuant
-
+import brevitas.nn as qnn
 
 def create_quantizer(qypte, ste, momentum, percentile, signed, sample_prop):
     if qypte == "FP32":
@@ -109,7 +109,8 @@ class GIN(torch.nn.Module):
 
         self.is_dq = dq
         gin_layer = GINConvMultiQuant if dq else GINConvQuant 
-
+        # self.quant_inp = qnn.QuantIdentity(bit_width=8)
+        # self.relu1 = qnn.QuantReLU(bit_width=8)
         lq, mq = make_quantizers(
             qypte,
             dq,
@@ -135,7 +136,7 @@ class GIN(torch.nn.Module):
             ResettableSequential(
                 Linear(dataset.num_features, hidden),
                 ReLU(),
-                LinearQuantized(hidden, hidden, layer_quantizers=lq),
+                qnn.QuantLinear(hidden, hidden, bias=True, weight_scaling_per_output_channel=True, weight_bit_width=8),
                 ReLU(),
                 BN(hidden),
             ),
@@ -147,9 +148,9 @@ class GIN(torch.nn.Module):
             self.convs.append(
                 gin_layer(
                     ResettableSequential(
-                        LinearQuantized(hidden, hidden, layer_quantizers=lq_signed),
+                        qnn.QuantLinear(hidden, hidden, bias=True, weight_scaling_per_output_channel=True, weight_bit_width=8),
                         ReLU(),
-                        LinearQuantized(hidden, hidden, layer_quantizers=lq),
+                        qnn.QuantLinear(hidden, hidden, bias=True, weight_scaling_per_output_channel=True, weight_bit_width=8),
                         ReLU(),
                         BN(hidden),
                     ),
@@ -158,10 +159,10 @@ class GIN(torch.nn.Module):
                 )
             )
 
-        self.lin1 = LinearQuantized(hidden, hidden, layer_quantizers=lq_signed)
-        self.lin2 = LinearQuantized(hidden, dataset.num_classes, layer_quantizers=lq)
-        # self.lin1 = Linear(hidden, hidden)
-        # self.lin2 = Linear(hidden, dataset.num_classes)
+        # self.lin1 = qnn.QuantLinear(hidden, hidden, bias=True, weight_scaling_per_output_channel=True, weight_bit_width=8)
+        # self.lin2 = qnn.QuantLinear(hidden, dataset.num_classes, bias=True, weight_scaling_per_output_channel=True, weight_bit_width=8)
+        self.lin1 = Linear(hidden, hidden)
+        self.lin2 = Linear(hidden, dataset.num_classes)
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
